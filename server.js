@@ -127,73 +127,387 @@ async function detectWordPress(url) {
     hasRankMath: false,
     hasContactForm7: false,
     hasWPML: false,
+    hasWPForms: false,
+    hasSliderRevolution: false,
+    hasGravityForms: false,
+    hasJetpack: false,
+    hasAkismet: false,
+    hasWordfence: false,
+    hasLiteSpeedCache: false,
+    hasW3TotalCache: false,
+    hasAutoptimize: false,
+    hasSmush: false,
+    hasUpdraftPlus: false,
     serverInfo: null,
-    cms: 'Unknown'
+    cms: 'Unknown',
+    detectionMethods: []
   };
 
+  const detectedPlugins = new Set();
+  const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+
   try {
-    // Fetch the homepage
-    const response = await axios.get(url, {
-      timeout: 15000,
-      maxRedirects: 5,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      validateStatus: (status) => status < 500
-    });
+    // === METODO 1: Fetch homepage HTML ===
+    const [homeResponse, apiResponse] = await Promise.allSettled([
+      axios.get(url, {
+        timeout: 15000,
+        maxRedirects: 5,
+        headers: { 'User-Agent': userAgent },
+        validateStatus: (status) => status < 500
+      }),
+      // === METODO 2: Prova la REST API wp-json ===
+      axios.get(`${url.replace(/\/$/, '')}/wp-json/`, {
+        timeout: 8000,
+        headers: { 'User-Agent': userAgent },
+        validateStatus: (status) => status < 500
+      }).catch(() => null)
+    ]);
 
-    const html = response.data;
-    const $ = cheerio.load(html);
-    const headers = response.headers;
+    let html = '';
+    let headers = {};
 
-    // Check for WordPress in HTML
+    if (homeResponse.status === 'fulfilled') {
+      html = homeResponse.value.data || '';
+      headers = homeResponse.value.headers || {};
+    }
+
+    // --- Check WordPress in HTML ---
     const wpPatterns = [
-      /wp-content/i,
-      /wp-includes/i,
-      /wp-json/i,
-      /wordpress/i,
-      /generator.*wordpress/i,
-      /<link rel="https:\/\/api\.w\.org\//i,
-      /xmlrpc\.php/i
+      /wp-content/i, /wp-includes/i, /wp-json/i, /wordpress/i,
+      /generator.*wordpress/i, /<link rel="https:\/\/api\.w\.org\//i,
+      /xmlrpc\.php/i, /wp-embed/i, /wp-emoji/i, /wp-block-library/i,
+      /class="[^"]*wp-/i, /id="[^"]*wp-/i, /data-wp-/i
     ];
 
     result.isWordPress = wpPatterns.some(pattern => pattern.test(html));
 
-    // Extract WordPress version
-    const versionMatch = html.match(/<meta name="generator" content="WordPress ([0-9.]+)"/i);
+    if (result.isWordPress) {
+      result.detectionMethods.push('html-patterns');
+    }
+
+    // --- Check REST API response ---
+    if (apiResponse.status === 'fulfilled' && apiResponse.value) {
+      const apiData = apiResponse.value.data;
+      if (apiData && (apiData.namespaces || apiData.authentication)) {
+        result.isWordPress = true;
+        result.detectionMethods.push('rest-api');
+        
+        // Estrai plugin dalle namespaces API
+        if (apiData.namespaces) {
+          const apiPlugins = {
+            'wc': 'WooCommerce',
+            'wc-admin': 'WooCommerce',
+            'elementor': 'Elementor',
+            'yoast': 'Yoast SEO',
+            'rank-math': 'Rank Math',
+            'jetpack': 'Jetpack',
+            'wordfence': 'Wordfence',
+            'contact-form-7': 'Contact Form 7',
+            'wpforms': 'WPForms',
+            'gravityforms': 'Gravity Forms',
+            'slider-revolution': 'Slider Revolution',
+            'wpml': 'WPML',
+            'litespeed-cache': 'LiteSpeed Cache',
+            'w3-total-cache': 'W3 Total Cache',
+            'autoptimize': 'Autoptimize',
+            'wp-smush': 'Smush',
+            'updraftplus': 'UpdraftPlus',
+            'akismet': 'Akismet'
+          };
+          
+          apiData.namespaces.forEach(ns => {
+            Object.entries(apiPlugins).forEach(([prefix, name]) => {
+              if (ns.startsWith(prefix + '/') || ns === prefix) {
+                detectedPlugins.add(name);
+              }
+            });
+          });
+        }
+      }
+    }
+
+    // --- Extract WordPress version ---
+    const versionMatch = html.match(/<meta\s+name=["']generator["']\s+content=["']WordPress\s+([0-9.]+)["']/i) ||
+                         html.match(/["']wp["']\s*:\s*["']([0-9.]+)["']/i);
     if (versionMatch) result.version = versionMatch[1];
 
-    // Extract theme from CSS links
-    const themeMatch = html.match(/wp-content\/themes\/([^\/\s"']+)/i);
-    if (themeMatch) result.theme = themeMatch[1];
+    // --- Extract theme ---
+    const themePatterns = [
+      /wp-content\/themes\/([^\/\s"'>]+)/i,
+      /wp-content\\\/themes\\\/([^\/\s"'>]+)/i,
+      /stylesheet["']?\s*:\s*["']([^"']*\/themes\/([^\/"']+))["']/i
+    ];
+    for (const pattern of themePatterns) {
+      const match = html.match(pattern);
+      if (match) {
+        result.theme = match[1].split('/').pop() || match[1];
+        break;
+      }
+    }
 
-    // Detect plugins from HTML/JS/CSS references
-    const pluginPatterns = {
-      hasWooCommerce: /woocommerce|wc-frontend|wc-add-to-cart/i,
-      hasElementor: /elementor|elementor-frontend|elementor-pro/i,
-      hasYoast: /yoast-seo|wordpress-seo/i,
-      hasWPRocket: /wp-rocket|rocket-lazyload/i,
-      hasRankMath: /rank-math|rank-math-seo/i,
-      hasContactForm7: /contact-form-7|wpcf7/i,
-      hasWPML: /wpml|sitepress/i
+    // --- Detect plugins from HTML/JS/CSS references ---
+    const htmlPluginPatterns = {
+      'WooCommerce': /woocommerce|wc-frontend|wc-add-to-cart|wc-blocks|wc-cart/i,
+      'Elementor': /elementor|elementor-frontend|elementor-pro|elementor-icons/i,
+      'Yoast SEO': /yoast-seo|wordpress-seo|yoast-schema/i,
+      'WP Rocket': /wp-rocket|rocket-lazyload|rocket-loader|wpr-/i,
+      'Rank Math': /rank-math|rank-math-seo|rank-math-schema/i,
+      'Contact Form 7': /contact-form-7|wpcf7|cf7-/i,
+      'WPML': /wpml|sitepress|wpml-/i,
+      'WPForms': /wpforms|wpf-/i,
+      'Gravity Forms': /gravityforms|gform/i,
+      'Slider Revolution': /revslider|slider-revolution|revolution-slider/i,
+      'Jetpack': /jetpack|jp-/i,
+      'Akismet': /akismet/i,
+      'Wordfence': /wordfence|wf-/i,
+      'LiteSpeed Cache': /litespeed-cache|lscache/i,
+      'W3 Total Cache': /w3-total-cache|w3tc/i,
+      'Autoptimize': /autoptimize|ao-/i,
+      'Smush': /smush|wp-smush/i,
+      'UpdraftPlus': /updraftplus|updraft-/i,
+      'WP Super Cache': /wp-super-cache/i,
+      'Cache Enabler': /cache-enabler/i,
+      'SG Optimizer': /sg-optimizer/i,
+      'Ninja Forms': /ninja-forms|nf-/i,
+      'Formidable': /formidable/i,
+      'Mailchimp': /mailchimp|mc4wp/i,
+      'WP Mail SMTP': /wp-mail-smtp/i,
+      'All in One SEO': /all-in-one-seo|aioseo/i,
+      'SEOPress': /seopress/i,
+      'Sucuri': /sucuri/i,
+      'iThemes Security': /ithemes-security|better-wp-security/i,
+      'Really Simple SSL': /really-simple-ssl/i,
+      'Cookie Notice': /cookie-notice|cookie-law/i,
+      'GDPR Cookie Consent': /gdpr-cookie-consent/i,
+      'WP Cookie Consent': /wp-cookie-consent/i,
+      'MonsterInsights': /monsterinsights|mi-/i,
+      'ExactMetrics': /exactmetrics/i,
+      'Google Site Kit': /google-site-kit|site-kit/i,
+      'Redirection': /redirection/i,
+      'Yoast Duplicate Post': /duplicate-post/i,
+      'Advanced Custom Fields': /advanced-custom-fields|acf-/i,
+      'Custom Field Suite': /custom-field-suite/i,
+      'Pods': /pods/i,
+      'Toolset': /toolset|types/i,
+      'Beaver Builder': /beaver-builder|fl-builder/i,
+      'Divi Builder': /divi-builder|et_pb/i,
+      'Visual Composer': /visual-composer|vc_/i,
+      'WPBakery': /wpbakery|js_composer/i,
+      'Oxygen': /oxygen/i,
+      'Bricks': /bricks/i,
+      'Breakdance': /breakdance/i,
+      'Kadence': /kadence|kt-/i,
+      'GenerateBlocks': /generateblocks/i,
+      'Stackable': /stackable|ugb-/i,
+      'Ultimate Blocks': /ultimate-blocks/i,
+      'Spectra': /spectra|uagb-/i,
+      'CoBlocks': /coblocks/i,
+      'Gutenberg': /gutenberg/i,
+      'Classic Editor': /classic-editor/i,
+      'Disable Gutenberg': /disable-gutenberg/i,
+      'Code Snippets': /code-snippets/i,
+      'WPCode': /wpcode/i,
+      'Admin Menu Editor': /admin-menu-editor/i,
+      'User Role Editor': /user-role-editor/i,
+      'Members': /members/i,
+      'Capability Manager': /capability-manager/i,
+      'Simple History': /simple-history/i,
+      'Activity Log': /activity-log/i,
+      'Query Monitor': /query-monitor/i,
+      'Debug Bar': /debug-bar/i,
+      'WP Crontrol': /wp-crontrol/i,
+      'Advanced Cron Manager': /advanced-cron-manager/i,
+      'WP-Optimize': /wp-optimize/i,
+      'WP Sweep': /wp-sweep/i,
+      'Advanced Database Cleaner': /advanced-database-cleaner/i,
+      'Media Cleaner': /media-cleaner/i,
+      'Enable Media Replace': /enable-media-replace/i,
+      'Regenerate Thumbnails': /regenerate-thumbnails/i,
+      'EWWW Image Optimizer': /ewww-image-optimizer/i,
+      'ShortPixel': /shortpixel/i,
+      'Imagify': /imagify/i,
+      'Optimole': /optimole/i,
+      'WebP Express': /webp-express/i,
+      'Perfmatters': /perfmatters/i,
+      'Flying Press': /flying-press/i,
+      'Swift Performance': /swift-performance/i,
+      'Breeze': /breeze/i,
+      'NitroPack': /nitropack/i,
+      'Cloudflare': /cloudflare/i,
+      'Sucuri Scanner': /sucuri-scanner/i,
+      'Wordfence Security': /wordfence/i,
+      'iThemes Security Pro': /ithemes-security-pro/i,
+      'All In One WP Security': /all-in-one-wp-security/i,
+      'BulletProof Security': /bulletproof-security/i,
+      'Cerber Security': /cerber/i,
+      'Loginizer': /loginizer/i,
+      'Limit Login Attempts': /limit-login-attempts/i,
+      'Two Factor': /two-factor/i,
+      'WP 2FA': /wp-2fa/i,
+      'Solid Security': /solid-security/i,
+      'Patchstack': /patchstack/i,
+      'MalCare': /malcare/i,
+      'BlogVault': /blogvault/i,
+      'ManageWP': /managewp/i,
+      'MainWP': /mainwp/i,
+      'InfiniteWP': /infinitewp/i,
+      'WP Remote': /wp-remote/i,
+      'SolidWP': /solidwp/i,
+      'Duplicator': /duplicator/i,
+      'All-in-One WP Migration': /all-in-one-wp-migration/i,
+      'WPvivid': /wpvivid/i,
+      'BackupBuddy': /backupbuddy/i,
+      'BlogVault Backup': /blogvault/i,
+      'VaultPress': /vaultpress/i,
+      'Jetpack Backup': /jetpack-backup/i,
+      'BoldGrid Backup': /boldgrid-backup/i,
+      'Total Upkeep': /total-upkeep/i,
+      'WP Staging': /wp-staging/i,
+      'WP Stagecoach': /wp-stagecoach/i,
+      'Duplicator Pro': /duplicator-pro/i,
+      'Migrate Guru': /migrate-guru/i,
+      'Search & Replace': /search-replace/i,
+      'Better Search Replace': /better-search-replace/i,
+      'WP Migrate DB': /wp-migrate-db/i,
+      'Polylang': /polylang/i,
+      'qTranslate': /qtranslate/i,
+      'GTranslate': /gtranslate/i,
+      'Weglot': /weglot/i,
+      'TranslatePress': /translatepress/i,
+      'Loco Translate': /loco-translate/i,
+      'MultilingualPress': /multilingualpress/i,
+      'BuddyPress': /buddypress/i,
+      'BuddyBoss': /buddyboss/i,
+      'bbPress': /bbpress/i,
+      'PeepSo': /peepso/i,
+      'LearnDash': /learndash/i,
+      'LifterLMS': /lifterlms/i,
+      'Tutor LMS': /tutor-lms/i,
+      'Sensei': /sensei/i,
+      'WP Courseware': /wp-courseware/i,
+      'LearnPress': /learnpress/i,
+      'MasterStudy': /masterstudy/i,
+      'Tribe Events': /the-events-calendar|tribe-events/i,
+      'Events Manager': /events-manager/i,
+      'EventON': /eventon/i,
+      'Amelia': /amelia/i,
+      'Bookly': /bookly/i,
+      'WP Booking Calendar': /wp-booking-calendar/i,
+      'Easy Appointments': /easy-appointments/i,
+      'Simply Schedule Appointments': /simply-schedule-appointments/i,
+      'LatePoint': /latepoint/i,
+      'WP ERP': /wp-erp/i,
+      'WP Project Manager': /wp-project-manager/i,
+      'UpStream': /upstream/i,
+      'Panorama': /panorama/i,
+      'WP Client Portal': /wp-client-portal/i,
+      'Client Dash': /client-dash/i,
+      'Admin Columns': /admin-columns/i,
+      'Pods': /pods/i,
+      'Custom Post Type UI': /custom-post-type-ui/i,
+      'Custom Post Type Maker': /custom-post-type-maker/i,
+      'Post Types Unlimited': /post-types-unlimited/i,
+      'ACF': /advanced-custom-fields|acf-/i,
+      'Meta Box': /meta-box/i,
+      'Carbon Fields': /carbon-fields/i,
+      'CMB2': /cmb2/i,
+      'Custom Field Suite': /custom-field-suite/i,
+      'Piklist': /piklist/i,
+      'Toolset Types': /toolset-types/i,
+      'FacetWP': /facetwp/i,
+      'SearchWP': /searchwp/i,
+      'Relevanssi': /relevanssi/i,
+      'ElasticPress': /elasticpress/i,
+      'Ajax Search Pro': /ajax-search-pro/i,
+      'Ivory Search': /ivory-search/i,
+      'FiboSearch': /fibosearch/i,
+      'WP Extended Search': /wp-extended-search/i,
+      'Better Search': /better-search/i,
+      'Search Everything': /search-everything/i,
+      'WP Google Search': /wp-google-search/i,
+      'Google Custom Search': /google-custom-search/i,
+      'Swiftype Search': /swiftype/i,
+      'Algolia': /algolia/i,
+      'FacetWP': /facetwp/i,
+      'Gridbuilder': /gridbuilder/i,
+      'WP Grid Builder': /wp-grid-builder/i,
+      'Essential Grid': /essential-grid/i,
+      'The Grid': /the-grid/i,
+      'Media Grid': /media-grid/i,
+      'UberGrid': /ubergrid/i,
+      'Grid Plus': /grid-plus/i,
+      'Post Grid': /post-grid/i,
+      'Content Views': /content-views/i,
+      'WP Show Posts': /wp-show-posts/i,
+      'Display Posts': /display-posts/i,
+      'Posts Table Pro': /posts-table-pro/i,
+      'TablePress': /tablepress/i,
+      'WP Table Builder': /wp-table-builder/i,
+      'Ninja Tables': /ninja-tables/i,
+      'wpDataTables': /wpdatatables/i,
+      'Visualizer': /visualizer/i,
+      'M Chart': /m-chart/i,
+      'Inline Google Spreadsheet Viewer': /inline-google-spreadsheet-viewer/i,
+      'WP Google Sheets': /wp-google-sheets/i,
+      'Sheet2Site': /sheet2site/i,
+      'ImportWP': /importwp/i,
+      'WP All Import': /wp-all-import/i,
+      'WP All Export': /wp-all-export/i,
+      'Product CSV Import Suite': /product-csv-import-suite/i,
+      'WP CSV': /wp-csv/i,
+      'CSV Importer': /csv-importer/i,
+      'Really Simple CSV Importer': /really-simple-csv-importer/i,
+      'WordPress Importer': /wordpress-importer/i,
+      'Widget Importer & Exporter': /widget-importer-exporter/i,
+      'Customizer Export/Import': /customizer-export-import/i,
+      'Customizer Search': /customizer-search/i,
+      'Kirki': /kirki/i,
+      'Customizer Framework': /customizer-framework/i,
+      'Options Framework': /options-framework/i,
+      'Redux Framework': /redux-framework/i,
+      'CMB2': /cmb2/i,
+      'Carbon Fields': /carbon-fields/i,
+      'Pods': /pods/i,
+      'Advanced Custom Fields': /advanced-custom-fields/i,
+      'Meta Box': /meta-box/i,
+      'Custom Field Suite': /custom-field-suite/i,
+      'Piklist': /piklist/i,
+      'Toolset Types': /toolset-types/i,
+      'Custom Post Type UI': /custom-post-type-ui/i,
+      'Pods': /pods/i,
+      'Custom Post Type Maker': /custom-post-type-maker/i,
+      'Post Types Unlimited': /post-types-unlimited/i,
+      'ACF': /advanced-custom-fields/i,
+      'Meta Box': /meta-box/i,
+      'Carbon Fields': /carbon-fields/i,
+      'CMB2': /cmb2/i,
+      'Custom Field Suite': /custom-field-suite/i,
+      'Piklist': /piklist/i,
+      'Toolset Types': /toolset-types/i
     };
 
-    for (const [key, pattern] of Object.entries(pluginPatterns)) {
-      if (pattern.test(html)) result[key] = true;
+    for (const [name, pattern] of Object.entries(htmlPluginPatterns)) {
+      if (pattern.test(html)) {
+        detectedPlugins.add(name);
+        const key = 'has' + name.replace(/[^a-zA-Z0-9]/g, '');
+        if (result.hasOwnProperty(key)) {
+          result[key] = true;
+        }
+      }
     }
 
-    // Count plugins from wp-content/plugins references
-    const pluginMatches = html.match(/wp-content\/plugins\/([^\/\s"']+)/gi);
+    // --- Count plugins from wp-content/plugins references ---
+    const pluginMatches = html.match(/wp-content\/plugins\/([^\/\s"'>]+)/gi);
     if (pluginMatches) {
-      const uniquePlugins = [...new Set(pluginMatches.map(m => m.replace(/wp-content\/plugins\//i, '').split('/')[0]))];
-      result.plugins = uniquePlugins.slice(0, 20); // Limit to 20
+      const uniquePlugins = [...new Set(pluginMatches.map(m => {
+        const slug = m.replace(/wp-content\/plugins\//i, '').split('/')[0];
+        return slug;
+      }))].filter(p => p && p.length > 1);
+      
+      uniquePlugins.forEach(p => detectedPlugins.add(p));
     }
 
-    // Server info from headers
-    if (headers['server']) result.serverInfo = headers['server'];
-    if (headers['x-powered-by']) result.serverInfo += ` | ${headers['x-powered-by']}`;
-
-    // Detect CMS if not WordPress
+    // --- Detect CMS if not WordPress ---
     if (!result.isWordPress) {
       if (/drupal/i.test(html)) result.cms = 'Drupal';
       else if (/joomla/i.test(html)) result.cms = 'Joomla';
@@ -205,6 +519,13 @@ async function detectWordPress(url) {
     } else {
       result.cms = 'WordPress';
     }
+
+    // --- Server info from headers ---
+    if (headers['server']) result.serverInfo = headers['server'];
+    if (headers['x-powered-by']) result.serverInfo = (result.serverInfo ? result.serverInfo + ' | ' : '') + headers['x-powered-by'];
+
+    // --- Convert Set to Array ---
+    result.plugins = [...detectedPlugins].slice(0, 30);
 
   } catch (error) {
     console.error('WordPress detection error:', error.message);
