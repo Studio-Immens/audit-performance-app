@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit Performance WordPress — Scopri Quanto Perdi | Studio Immens</title>
+<meta name="description" content="Analisi gratuita del tuo sito WordPress in 60 secondi. Velocità, Core Web Vitals, plugin rilevati e impatto economico. Tool gratuito di Studio Immens.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f; --card: #111118; --card-hover: #1a1a24; --input-bg: #16161f;
+    --border: #2a2a3a; --border-light: #3a3a4a; --text: #f0f0f5;
+    --text-secondary: #a0a0b0; --text-muted: #6a6a7a; --accent: #c9a96e;
+    --accent-light: #e0c48a; --accent-dark: #a88a4a; --success: #4ade80;
+    --danger: #f87171; --warning: #fbbf24; --info: #1f9aff;
+    --gradient-gold: linear-gradient(135deg, #c9a96e 0%, #e0c48a 50%, #c9a96e 100%);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text); line-height:1.6;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+  }
+  h1, h2, h3, h4, h5, h6 { color: var(--text)!important; }
+
+  /* ===== HERO ===== */
+  .hero {
+    position: relative; padding: 100px 24px 60px; text-align: center; overflow: hidden;
+  }
+  .hero::before {
+    content: ''; position: absolute; top: -50%; left: 50%; transform: translateX(-50%);
+    width: 800px; height: 800px;
+    background: radial-gradient(circle, rgba(201,169,110,0.08) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  .hero-badge {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(201,169,110,0.1); border: 1px solid rgba(201,169,110,0.2);
+    color: var(--accent); font-size: 13px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    padding: 8px 20px; border-radius: 100px; margin-bottom: 32px; position: relative; z-index: 1;
+  }
+  .hero-badge::before {
+    content: ''; width: 8px; height: 8px; background: var(--accent); border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.8)} }
+  .hero h1 {
+    font-size: clamp(2.2rem, 5vw, 3.8rem); font-weight: 800; line-height: 1.1;
+    max-width: 800px; margin: 0 auto 24px; letter-spacing: -0.03em; position: relative; z-index: 1;
+  }
+  .hero h1 .highlight {
+    background: var(--gradient-gold); -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .hero-subtitle {
+    font-size: clamp(1rem, 2vw, 1.25rem); color: var(--text-secondary);
+    max-width: 640px; margin: 0 auto 48px; line-height: 1.7; position: relative; z-index: 1;
+  }
+
+  /* ===== AUDIT TOOL ===== */
+  .audit-section { padding: 0 24px 60px; max-width: 720px; margin: 0 auto; }
+  .audit-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+    padding: 40px; position: relative;
+  }
+  .audit-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--gradient-gold); border-radius: 24px 24px 0 0;
+  }
+  .audit-card h2 {
+    font-size: 1.4rem; font-weight: 700; margin-bottom: 8px; text-align: center;
+  }
+  .audit-card .subtitle {
+    text-align: center; color: var(--text-secondary); margin-bottom: 28px; font-size: 0.95rem;
+  }
+  label { display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 8px; }
+  .hint { font-weight: 400; color: var(--text-muted); font-size: 0.8rem; display: block; margin-top: 4px; }
+  input[type="url"], input[type="number"] {
+    width: 100%; padding: 16px 20px; background: var(--input-bg); border: 1px solid var(--border);
+    border-radius: 12px; color: var(--text); font-size: 1rem; font-family: inherit;
+    transition: all 0.3s ease;
+  }
+input[type="url"]:focus{color: #fff!important}
+  input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(201,169,110,0.1); }
+  input::placeholder { color: var(--text-muted); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+  .btn {
+    width: 100%; padding: 18px; border-radius: 12px; font-size: 1.05rem; font-weight: 700;
+    border: none; cursor: pointer; background: var(--gradient-gold); color: #0a0a0f;
+    transition: all 0.3s ease; font-family: inherit; margin-top: 8px;
+  }
+  .btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201,169,110,0.3); }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+  .btn-secondary {
+    background: transparent; border: 1px solid var(--border); color: var(--text-secondary);
+  }
+  .btn-secondary:hover { border-color: var(--border-light); color: var(--text); }
+
+  /* ===== LOADING ===== */
+  .loading { display: none; text-align: center; padding: 60px 20px; }
+  .loading.active { display: block; }
+  .spinner {
+    width: 60px; height: 60px; border: 4px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 1s linear infinite; margin: 0 auto 24px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--text-secondary); font-size: 1rem; }
+  .loading-step { color: var(--accent); font-size: 0.9rem; margin-top: 10px; font-weight: 600; }
+  .loading-detail { color: var(--text-muted); font-size: 0.8rem; margin-top: 6px; }
+
+  /* ===== ERROR ===== */
+  .error-box {
+    display: none; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.2);
+    border-radius: 16px; padding: 24px; text-align: center; margin-bottom: 20px;
+  }
+  .error-box.active { display: block; }
+  .error-box strong { color: var(--danger); font-size: 1.1rem; }
+  .error-box p { color: var(--text-secondary); margin-top: 8px; font-size: 0.9rem; }
+
+  /* ===== RESULTS ===== */
+  .results { display: none; padding: 0 24px 80px; max-width: 800px; margin: 0 auto; }
+  .results.active { display: block; animation: fadeIn 0.6s ease; }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(10px); } to { opacity:1; transform: translateY(0); } }
+
+  .result-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 24px;
+    padding: 32px; margin-bottom: 20px; position: relative; overflow: hidden;
+  }
+  .result-card::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+    background: var(--gradient-gold);
+  }
+
+  /* Score Circle */
+  .score-section { text-align: center; margin-bottom: 32px; }
+  .score-circle {
+    width: 180px; height: 180px; border-radius: 50%; margin: 0 auto 20px;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    border: 10px solid var(--border); position: relative; transition: all 0.5s ease;
+  }
+  .score-number { font-size: 4rem; font-weight: 900; line-height: 1; }
+  .score-label { font-size: 0.9rem; color: var(--text-muted); margin-top: 4px; }
+  .score-title { font-size: 1.6rem; font-weight: 800; margin-bottom: 8px; }
+  .score-desc { color: var(--text-secondary); font-size: 1rem; }
+
+  /* WordPress Badge */
+  .wp-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 16px; border-radius: 100px; font-size: 0.8rem; font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .wp-badge.yes { background: rgba(74,222,128,0.1); color: var(--success); border: 1px solid rgba(74,222,128,0.2); }
+  .wp-badge.no { background: rgba(248,113,113,0.1); color: var(--danger); border: 1px solid rgba(248,113,113,0.2); }
+
+  /* Metrics */
+  .metric-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 14px 0; border-bottom: 1px solid var(--border);
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-name { font-size: 0.9rem; color: var(--text-secondary); }
+  .metric-value { font-weight: 700; font-size: 1.05rem; }
+  .metric-value.good { color: var(--success); }
+  .metric-value.bad { color: var(--danger); }
+  .metric-value.warn { color: var(--warning); }
+  .metric-value.info { color: var(--info); }
+
+  /* Plugin Tags */
+  .plugin-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .plugin-tag {
+    background: var(--input-bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: 4px 10px; font-size: 0.75rem; color: var(--text-muted);
+  }
+  .plugin-tag.detected { color: var(--accent); border-color: rgba(201,169,110,0.3); background: rgba(201,169,110,0.05); }
+
+  /* Recommendations */
+  .rec-list { list-style: none; }
+  .rec-list li {
+    padding: 16px; margin-bottom: 10px; border-radius: 12px;
+    background: var(--input-bg); border-left: 3px solid var(--danger);
+    font-size: 0.9rem;
+  }
+  .rec-list li.medium { border-left-color: var(--warning); }
+  .rec-list li.low { border-left-color: var(--success); }
+  .rec-list li .rec-title { font-weight: 700; display: block; margin-bottom: 6px; color: var(--text); }
+  .rec-list li .rec-desc { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.5; }
+  .rec-list li .rec-impact { font-size: 0.75rem; margin-top: 8px; font-weight: 600; }
+
+  /* Opportunities */
+  .opp-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .opp-row:last-child { border-bottom: none; }
+  .opp-name { font-size: 0.85rem; color: var(--text-secondary); }
+  .opp-savings { font-weight: 600; font-size: 0.9rem; color: var(--warning); }
+
+  /* CTA Box */
+  .cta-box {
+    background: linear-gradient(135deg, rgba(201,169,110,0.1) 0%, rgba(201,169,110,0.05) 100%);
+    border: 1px solid rgba(201,169,110,0.2); border-radius: 20px; padding: 40px;
+    text-align: center; margin-top: 24px;
+  }
+  .cta-box h3 { font-size: 1.4rem; font-weight: 700; margin-bottom: 12px; }
+  .cta-box p { color: var(--text-secondary); font-size: 0.95rem; margin-bottom: 24px; max-width: 500px; margin-left: auto; margin-right: auto; }
+  .cta-box a {
+    display: inline-block; padding: 16px 40px; border-radius: 12px;
+    background: var(--gradient-gold); color: #0a0a0f;
+    text-decoration: none; font-weight: 700; font-size: 1.05rem;
+    transition: all 0.3s ease;
+  }
+  .cta-box a:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(201,169,110,0.3); }
+  .guarantee {
+    display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
+    font-size: 0.85rem; color: var(--text-muted);
+  }
+
+  /* Section Headers inside cards */
+  .card-title {
+    font-size: 1.1rem; font-weight: 700; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* Watermark */
+  .watermark { text-align: center; padding: 40px 24px; font-size: 0.8rem; color: var(--text-muted); }
+  .watermark strong { color: var(--accent); }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .audit-card, .result-card { padding: 24px; }
+    .score-circle { width: 140px; height: 140px; }
+    .score-number { font-size: 3rem; }
+    .hero { padding: 60px 20px 40px; }
+  }
+</style>
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+
+<!-- ===== HERO ===== -->
+<section class="hero">
+  <div class="hero-badge">Tool Gratuito — Nessuna Registrazione</div>
+  <h1>Scopri Quanto <span class="highlight">Perdi</span> con un Sito Lento</h1>
+  <p class="hero-subtitle">
+    Analisi automatica del tuo sito WordPress in <strong>60 secondi</strong>.
+    Velocita reale, plugin rilevati, Core Web Vitals e impatto economico.
+    Powered by <strong>Google PageSpeed Insights</strong>.
+  </p>
+</section>
+
+<!-- ===== AUDIT FORM ===== -->
+<section class="audit-section" id="formSection">
+  <div class="audit-card">
+    <h2>Inserisci l URL del Tuo Sito</h2>
+    <p class="subtitle">Lascia che il nostro proxy sicuro analizzi tutto in tempo reale.</p>
+
+    <label>URL del sito web <span class="hint">es. https://tuosito.it</span></label>
+    <input type="url" id="siteUrl" placeholder="https://tuosito.it" required>
+
+    <div class="two-col" style="margin-top:16px">
+      <div>
+        <label>Traffico mensile stimato <span class="hint">visitatori/mese</span></label>
+        <input type="number" id="traffic" placeholder="5000" min="0" value="5000">
+      </div>
+      <div>
+        <label>Valore conversione (EUR) <span class="hint">media per lead/vendita</span></label>
+        <input type="number" id="conversionValue" placeholder="150" min="0" value="150">
+      </div>
+    </div>
+
+    <button class="btn" id="auditBtn" onclick="runAudit()">Avvia Audit Completo</button>
+    <p style="text-align:center;margin-top:16px;font-size:0.8rem;color:var(--text-muted)">
+      Nessun dato salvato. L analisi avviene in tempo reale via proxy sicuro.
+    </p>
+  </div>
+</section>
+
+<!-- ===== LOADING ===== -->
+<section class="loading" id="loadingSection">
+  <div class="spinner"></div>
+  <div class="loading-text">Analisi in corso...</div>
+  <div class="loading-step" id="loadingStep">Connessione al proxy sicuro...</div>
+  <div class="loading-detail" id="loadingDetail">Questo richiede 3-5 secondi</div>
+</section>
+
+<!-- ===== ERROR ===== -->
+<div class="error-box" id="errorBox">
+  <strong>Errore</strong>
+  <p id="errorMessage"></p>
+</div>
+
+<!-- ===== RESULTS ===== -->
+<section class="results" id="resultSection">
+
+  <!-- Score -->
+  <div class="result-card">
+    <div class="score-section">
+      <div class="score-circle" id="scoreCircle">
+        <div class="score-number" id="scoreNumber">--</div>
+        <div class="score-label">/100 Mobile</div>
+      </div>
+      <div class="score-title" id="scoreTitle">--</div>
+      <div class="score-desc" id="scoreDesc">--</div>
+    </div>
+  </div>
+
+  <!-- WordPress Detection -->
+  <div class="result-card">
+    <div class="card-title">Rilevamento Tecnologia</div>
+    <div id="wpBadge" class="wp-badge"></div>
+    <div class="metric-row">
+      <span class="metric-name">CMS Rilevato</span>
+      <span class="metric-value info" id="cmsValue">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">Versione WordPress</span>
+      <span class="metric-value" id="wpVersion">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">Tema Attivo</span>
+      <span class="metric-value" id="wpTheme">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">Plugin Rilevati</span>
+      <span class="metric-value" id="pluginCount">--</span>
+    </div>
+    <div class="metric-row" style="border-bottom:none">
+      <span class="metric-name">Server</span>
+      <span class="metric-value" id="serverInfo">--</span>
+    </div>
+    <div class="plugin-tags" id="pluginTags"></div>
+  </div>
+
+  <!-- Core Web Vitals -->
+  <div class="result-card">
+    <div class="card-title">Core Web Vitals (Mobile)</div>
+    <div class="metric-row">
+      <span class="metric-name">LCP — Largest Contentful Paint</span>
+      <span class="metric-value" id="lcpValue">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">INP — Interaction to Next Paint</span>
+      <span class="metric-value" id="inpValue">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">CLS — Cumulative Layout Shift</span>
+      <span class="metric-value" id="clsValue">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">TTFB — Time to First Byte</span>
+      <span class="metric-value" id="ttfbValue">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">FCP — First Contentful Paint</span>
+      <span class="metric-value" id="fcpValue">--</span>
+    </div>
+    <div class="metric-row" style="border-bottom:none">
+      <span class="metric-name">Speed Index</span>
+      <span class="metric-value" id="siValue">--</span>
+    </div>
+  </div>
+
+  <!-- Technical -->
+  <div class="result-card">
+    <div class="card-title">Metriche Tecniche</div>
+    <div class="metric-row">
+      <span class="metric-name">Dimensione Pagina</span>
+      <span class="metric-value" id="pageSize">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">Richieste HTTP</span>
+      <span class="metric-value" id="requests">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">Risorse Render-Blocking</span>
+      <span class="metric-value" id="renderBlocking">--</span>
+    </div>
+    <div class="metric-row" style="border-bottom:none">
+      <span class="metric-name">Server Response Time</span>
+      <span class="metric-value" id="serverResponse">--</span>
+    </div>
+  </div>
+
+  <!-- Business Impact -->
+  <div class="result-card">
+    <div class="card-title">Impatto Economico Stimato</div>
+    <div class="metric-row">
+      <span class="metric-name">Perdita conversioni per lentezza</span>
+      <span class="metric-value bad" id="convLoss">--</span>
+    </div>
+    <div class="metric-row">
+      <span class="metric-name">Lead persi stimati / mese</span>
+      <span class="metric-value bad" id="lostLeads">--</span>
+    </div>
+    <div class="metric-row" style="border-bottom:none">
+      <span class="metric-name" style="font-size:1.05rem">Perdita annuale stimata</span>
+      <span class="metric-value bad" id="annualLoss" style="font-size:1.6rem">--</span>
+    </div>
+  </div>
+
+  <!-- Recommendations -->
+  <div class="result-card">
+    <div class="card-title">Priorita di Intervento</div>
+    <ul class="rec-list" id="priorityList"></ul>
+  </div>
+
+  <!-- Opportunities -->
+  <div class="result-card">
+    <div class="card-title">Opportunita di Ottimizzazione (Google PSI)</div>
+    <div id="opportunitiesList"></div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-box">
+    <h3>Il tuo sito perde soldi ogni giorno.</h3>
+    <p>La Fortezza Digitale di Studio Immens elimina ogni problema tecnico con un canone unico. Zero plugin premium di terzi, zero ore perse, zero sorprese. Performance garantita: &lt; 200ms.</p>
+    <a href="https://studioimmens.com/candidati">Prenota Diagnosi Gratuita</a>
+    <div class="guarantee">
+      <span></span>
+      <span>Garanzia 30 Giorni: soddisfatto o ti aiutiamo a migrare gratis</span>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-top:20px">
+    <button class="btn btn-secondary" onclick="resetAudit()">Nuovo Audit</button>
+  </div>
+</section>
+
+<!-- ===== WATERMARK ===== -->
+<div class="watermark">
+  Audit generato da <strong>Studio Immens</strong> — studioimmens.com<br>
+  <span style="font-size:0.75rem">Analisi in tempo reale via Google PageSpeed Insights. Nessun dato viene salvato sui nostri server.</span>
+</div>
+
+<script>
+const PROXY_URL = 'https://audit.studioimmens.com';
+
+function setLoading(step, detail) {
+  document.getElementById('loadingStep').textContent = step;
+  if (detail) document.getElementById('loadingDetail').textContent = detail;
+}
+
+function showError(msg) {
+  document.getElementById('errorMessage').textContent = msg;
+  document.getElementById('errorBox').classList.add('active');
+  document.getElementById('loadingSection').classList.remove('active');
+  document.getElementById('formSection').style.display = 'block';
+}
+
+function resetAudit() {
+  document.getElementById('resultSection').classList.remove('active');
+  document.getElementById('errorBox').classList.remove('active');
+  document.getElementById('formSection').style.display = 'block';
+  document.getElementById('siteUrl').value = '';
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+
+async function runAudit() {
+  const urlInput = document.getElementById('siteUrl');
+  const url = urlInput.value.trim();
+  const traffic = parseInt(document.getElementById('traffic').value) || 5000;
+  const conversionValue = parseFloat(document.getElementById('conversionValue').value) || 150;
+  const btn = document.getElementById('auditBtn');
+
+  if (!url) {
+    showError("Inserisci l'URL del sito da analizzare.");
+    urlInput.focus();
+    return;
+  }
+
+  let targetUrl = url;
+  if (!targetUrl.startsWith('http')) targetUrl = 'https://' + targetUrl;
+  try { new URL(targetUrl); } catch {
+    showError('URL non valido. Inserisci un indirizzo completo, es. https://tuosito.it');
+    return;
+  }
+
+  btn.disabled = true;
+  document.getElementById('formSection').style.display = 'none';
+  document.getElementById('errorBox').classList.remove('active');
+  document.getElementById('loadingSection').classList.add('active');
+
+  try {
+    setLoading('Connessione al proxy sicuro...', 'audit.studioimmens.com');
+    await new Promise(r => setTimeout(r, 600));
+
+    setLoading('Rilevamento tecnologia e CMS...', 'Analisi HTML, plugin, tema');
+    await new Promise(r => setTimeout(r, 800));
+
+    setLoading('Scan PageSpeed Insights Mobile + Desktop...', 'Google PSI API — 3-4 secondi');
+
+    const response = await fetch(PROXY_URL + '/api/audit', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Origin': window.location.origin
+      },
+      body: JSON.stringify({ url: targetUrl, traffic: traffic, conversionValue: conversionValue })
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(function() { return {}; });
+      if (response.status === 429) {
+        throw new Error("Hai raggiunto il limite di 10 audit all'ora. Riprova tra un'ora.");
+      }
+      throw new Error(err.message || 'Errore ' + response.status + ': impossibile completare l audit.');
+    }
+
+    const data = await response.json();
+    if (!data.success) throw new Error(data.error || 'Audit fallito');
+
+    setLoading('Calcolo impatto economico...', 'Quasi fatto');
+    await new Promise(r => setTimeout(r, 400));
+
+    displayResults(data);
+
+  } catch (error) {
+    console.error('Audit error:', error);
+    showError(error.message || 'Errore di connessione. Verifica che il proxy sia online e riprova.');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function displayResults(data) {
+  document.getElementById('loadingSection').classList.remove('active');
+  document.getElementById('resultSection').classList.add('active');
+
+  var wp = data.wordpress;
+  var perf = data.performance.mobile;
+  var biz = data.business;
+
+  var wpBadge = document.getElementById('wpBadge');
+  if (wp.isWordPress) {
+    wpBadge.className = 'wp-badge yes';
+    wpBadge.innerHTML = 'WordPress Rilevato';
+  } else {
+    wpBadge.className = 'wp-badge no';
+    wpBadge.innerHTML = 'WordPress NON rilevato — ' + wp.cms;
+  }
+
+  document.getElementById('cmsValue').textContent = wp.cms;
+  document.getElementById('wpVersion').textContent = wp.version || 'N/A';
+  document.getElementById('wpTheme').textContent = wp.theme || 'N/A';
+  document.getElementById('pluginCount').textContent = wp.plugins.length + ' plugin';
+  document.getElementById('serverInfo').textContent = wp.serverInfo || 'N/A';
+
+  var tagsContainer = document.getElementById('pluginTags');
+  tagsContainer.innerHTML = '';
+
+  var detectedPlugins = [];
+  if (wp.hasWooCommerce) detectedPlugins.push('WooCommerce');
+  if (wp.hasElementor) detectedPlugins.push('Elementor');
+  if (wp.hasYoast) detectedPlugins.push('Yoast SEO');
+  if (wp.hasWPRocket) detectedPlugins.push('WP Rocket');
+  if (wp.hasRankMath) detectedPlugins.push('Rank Math');
+  if (wp.hasContactForm7) detectedPlugins.push('Contact Form 7');
+  if (wp.hasWPML) detectedPlugins.push('WPML');
+
+  detectedPlugins.forEach(function(p) {
+    var tag = document.createElement('span');
+    tag.className = 'plugin-tag detected';
+    tag.textContent = p;
+    tagsContainer.appendChild(tag);
+  });
+
+  wp.plugins.slice(0, 8).forEach(function(p) {
+    if (detectedPlugins.indexOf(p) === -1) {
+      var tag = document.createElement('span');
+      tag.className = 'plugin-tag';
+      tag.textContent = p;
+      tagsContainer.appendChild(tag);
+    }
+  });
+
+  var score = perf.score;
+  var circle = document.getElementById('scoreCircle');
+  var num = document.getElementById('scoreNumber');
+  var title = document.getElementById('scoreTitle');
+  var desc = document.getElementById('scoreDesc');
+
+  num.textContent = score;
+  if (score >= 90) {
+    circle.style.borderColor = '#4ade80';
+    circle.style.boxShadow = '0 0 50px rgba(74,222,128,0.25)';
+    title.textContent = 'Eccellente';
+    title.style.color = '#4ade80';
+    desc.textContent = 'Il tuo sito e ben ottimizzato. Piccoli miglioramenti per il top.';
+  } else if (score >= 50) {
+    circle.style.borderColor = '#fbbf24';
+    circle.style.boxShadow = '0 0 50px rgba(251,191,36,0.25)';
+    title.textContent = 'Necessita Interventi';
+    title.style.color = '#fbbf24';
+    desc.textContent = 'Ci sono problemi significativi che ti costano conversioni e ranking.';
+  } else {
+    circle.style.borderColor = '#f87171';
+    circle.style.boxShadow = '0 0 50px rgba(248,113,113,0.25)';
+    title.textContent = 'Critico';
+    title.style.color = '#f87171';
+    desc.textContent = 'Il tuo sito sta perdendo clienti ogni giorno. Intervento urgente necessario.';
+  }
+
+  function colorMetric(value, thresholds) {
+    if (value <= thresholds.good) return 'good';
+    if (value <= thresholds.poor) return 'warn';
+    return 'bad';
+  }
+
+  var lcp = perf.metrics.lcp.value;
+  var lcpEl = document.getElementById('lcpValue');
+  lcpEl.textContent = lcp.toFixed(2) + 's';
+  lcpEl.className = 'metric-value ' + colorMetric(lcp, {good: 2.5, poor: 4.0});
+
+  var inp = perf.metrics.inp.value;
+  var inpEl = document.getElementById('inpValue');
+  if (inp > 0) {
+    inpEl.textContent = inp.toFixed(0) + 'ms';
+    inpEl.className = 'metric-value ' + colorMetric(inp, {good: 200, poor: 500});
+  } else {
+    inpEl.textContent = 'N/D';
+    inpEl.className = 'metric-value';
+  }
+
+  var cls = perf.metrics.cls.value;
+  var clsEl = document.getElementById('clsValue');
+  clsEl.textContent = cls.toFixed(3);
+  clsEl.className = 'metric-value ' + colorMetric(cls, {good: 0.1, poor: 0.25});
+
+  var ttfb = perf.metrics.ttfb.value;
+  var ttfbEl = document.getElementById('ttfbValue');
+  ttfbEl.textContent = ttfb.toFixed(0) + 'ms';
+  ttfbEl.className = 'metric-value ' + colorMetric(ttfb, {good: 600, poor: 1000});
+
+  document.getElementById('fcpValue').textContent = perf.metrics.fcp.value.toFixed(2) + 's';
+  document.getElementById('siValue').textContent = perf.metrics.si.value.toFixed(2) + 's';
+
+  document.getElementById('pageSize').textContent = perf.diagnostics.pageSizeFormatted;
+  document.getElementById('requests').textContent = perf.diagnostics.requests;
+  document.getElementById('renderBlocking').textContent = perf.diagnostics.renderBlockingResources;
+  document.getElementById('serverResponse').textContent = perf.diagnostics.serverResponseTime.toFixed(0) + 'ms';
+
+  document.getElementById('convLoss').textContent = biz.speedPenalty > 0 ? '-' + biz.speedPenalty + '% conversioni' : 'Nessuna';
+  document.getElementById('lostLeads').textContent = biz.lostLeads + '/mese';
+  document.getElementById('annualLoss').textContent = 'EUR ' + biz.annualLoss.toLocaleString('it-IT');
+
+  var list = document.getElementById('priorityList');
+  list.innerHTML = biz.recommendations.map(function(r) {
+    var cls = r.priority === 'critical' ? '' : r.priority === 'high' ? 'medium' : 'low';
+    var impactColor = r.priority === 'critical' ? 'color:#f87171' : r.priority === 'high' ? 'color:#fbbf24' : 'color:#4ade80';
+    return '<li class="' + cls + '"><span class="rec-title">' + r.title + '</span><span class="rec-desc">' + r.description + '</span><span class="rec-impact" style="' + impactColor + '">Impatto: ' + r.impact + '</span></li>';
+  }).join('');
+
+  var oppList = document.getElementById('opportunitiesList');
+  if (perf.opportunities && perf.opportunities.length > 0) {
+    oppList.innerHTML = perf.opportunities.slice(0, 5).map(function(o) {
+      return '<div class="opp-row"><span class="opp-name">' + o.title + '</span><span class="opp-savings">' + o.savings + '</span></div>';
+    }).join('');
+  } else {
+    oppList.innerHTML = '<p style="color:var(--text-muted);font-size:0.9rem;padding:12px 0">Nessuna opportunita critica rilevata. Ottimo lavoro!</p>';
+  }
+
+  window.scrollTo({top: 0, behavior: 'smooth'});
+}
+</script>
+
+</body>
+</html>
