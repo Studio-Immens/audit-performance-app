@@ -7,6 +7,7 @@ const hpp = require('hpp');
 const axios = require('axios');
 const cheerio = require('cheerio');
 require('dotenv').config();
+const pdfReport = require('./lib/pdf-report');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -986,6 +987,55 @@ app.post('/api/detect', auditLimiter, async (req, res) => {
   }
 });
 
+// ============================================
+// PDF REPORT ENDPOINT
+// ============================================
+
+// POST /api/report — Generate PDF report from audit data
+app.post('/api/report', auditLimiter, async (req, res) => {
+  try {
+    const { url, score, metrics, diagnostics, business, wordpress } = req.body;
+
+    if (!url && !score) {
+      return res.status(400).json({ error: 'Dati audit richiesti' });
+    }
+
+    console.log(`[PDF] Generating report for ${url}, score: ${score}`);
+
+    const result = await pdfReport.generateReport({
+      url: url || 'N/A',
+      score: score || 0,
+      metrics: metrics || {},
+      diagnostics: diagnostics || {},
+      business: business || {},
+      wordpress: wordpress || {}
+    });
+
+    console.log(`[PDF] Report generated: ${result.filename} (${(result.size / 1024).toFixed(0)}KB)`);
+
+    res.json({
+      success: true,
+      token: result.token,
+      filename: result.filename,
+      size: result.size,
+      downloadUrl: `/reports/${result.token}.pdf`
+    });
+
+  } catch (error) {
+    console.error('[PDF] Generation error:', error.message);
+    res.status(500).json({ error: 'Generazione report fallita', message: error.message });
+  }
+});
+
+// GET /reports/:token.pdf — Download PDF report
+app.get('/reports/:token.pdf', (req, res) => {
+  const filepath = pdfReport.getReportPath(req.params.token);
+  if (!filepath) {
+    return res.status(404).json({ error: 'Report non trovato o scaduto' });
+  }
+  res.download(filepath, 'audit-report-studio-immens.pdf');
+});
+
 // Serve static files
 app.use(express.static('public'));
 app.use(express.static('views'));
@@ -1009,4 +1059,14 @@ app.listen(PORT, () => {
   console.log(`🚀 Studio Immens Audit Proxy running on port ${PORT}`);
   console.log(`🔒 Allowed origins: ${allowedOrigins.join(', ')}`);
   console.log(`📊 Rate limits: 100 req/15min global, 10 audits/hour per IP`);
+  console.log(`📄 PDF reports stored in reports/ directory`);
+  console.log(`🧹 Cleanup: automatico ogni ora (report >30 giorni)`);
 });
+
+// Cleanup old reports every hour
+setInterval(() => {
+  const removed = pdfReport.cleanupOldReports(30);
+  if (removed > 0) {
+    console.log(`[CLEANUP] Rimosso ${removed} report PDF più vecchi di 30 giorni`);
+  }
+}, 60 * 60 * 1000);
