@@ -42,19 +42,21 @@ const allowedOrigins = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',') 
   : ['https://studioimmens.com', 'https://www.studioimmens.com'];
 
-app.use(cors({
+const corsMiddleware = cors({
   origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
     if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error('CORS policy: Origin not allowed'), false);
+      return callback(null, false);
     }
     return callback(null, true);
   },
   methods: ['POST', 'GET', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Origin'],
   credentials: false
-}));
+});
+
+app.use(corsMiddleware);
+app.options('*', corsMiddleware);
 
 // ============================================
 // RATE LIMITING & ANTI-ABUSE
