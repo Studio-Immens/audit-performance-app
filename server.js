@@ -228,67 +228,140 @@ async function runPageSpeedAudit(url) {
   const results = {};
 
   for (const strategy of strategies) {
-    const psiUrl = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&key=${API_KEY}&category=PERFORMANCE&category=ACCESSIBILITY&category=BEST_PRACTICES&category=SEO&strategy=${strategy}`;
+    const psiUrl = new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
+    psiUrl.searchParams.set('url', url);
+    psiUrl.searchParams.set('key', API_KEY);
+    psiUrl.searchParams.set('category', 'PERFORMANCE');
+    psiUrl.searchParams.set('category', 'ACCESSIBILITY');
+    psiUrl.searchParams.set('category', 'BEST_PRACTICES');
+    psiUrl.searchParams.set('category', 'SEO');
+    psiUrl.searchParams.set('strategy', strategy);
 
-    const response = await axios.get(psiUrl, { timeout: 30000 });
-    const data = response.data;
-    const lighthouse = data.lighthouseResult;
-    const audits = lighthouse.audits;
+    console.log(`[PSI] Calling ${strategy} audit for: ${url}`);
+    console.log(`[PSI] URL (no key): ${psiUrl.toString().replace(API_KEY, '***')}`);
 
-    results[strategy.toLowerCase()] = {
-      score: Math.round(lighthouse.categories.performance.score * 100),
-      accessibility: Math.round(lighthouse.categories.accessibility.score * 100),
-      bestPractices: Math.round(lighthouse.categories['best-practices'].score * 100),
-      seo: Math.round(lighthouse.categories.seo.score * 100),
-      metrics: {
-        lcp: {
-          value: audits['largest-contentful-paint']?.numericValue / 1000 || 0,
-          displayValue: audits['largest-contentful-paint']?.displayValue || 'N/A',
-          score: audits['largest-contentful-paint']?.score || 0
+    try {
+      const response = await axios.get(psiUrl.toString(), {
+        timeout: 45000,
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Studio-Immens-Audit-Proxy/1.0)'
         },
-        inp: {
-          value: audits['interaction-to-next-paint']?.numericValue || 0,
-          displayValue: audits['interaction-to-next-paint']?.displayValue || 'N/A',
-          score: audits['interaction-to-next-paint']?.score || 0
+        validateStatus: (status) => status < 500
+      });
+
+      if (response.status !== 200) {
+        console.error(`[PSI] ${strategy} returned status ${response.status}:`, response.data);
+        throw new Error(`PageSpeed API returned ${response.status}: ${JSON.stringify(response.data)}`);
+      }
+
+      const data = response.data;
+      
+      if (!data.lighthouseResult) {
+        console.error(`[PSI] ${strategy} missing lighthouseResult:`, data);
+        throw new Error('PageSpeed API response missing lighthouseResult');
+      }
+
+      const lighthouse = data.lighthouseResult;
+      const audits = lighthouse.audits;
+
+      results[strategy.toLowerCase()] = {
+        score: Math.round((lighthouse.categories?.performance?.score || 0) * 100),
+        accessibility: Math.round((lighthouse.categories?.accessibility?.score || 0) * 100),
+        bestPractices: Math.round((lighthouse.categories?.['best-practices']?.score || 0) * 100),
+        seo: Math.round((lighthouse.categories?.seo?.score || 0) * 100),
+        metrics: {
+          lcp: {
+            value: audits?.['largest-contentful-paint']?.numericValue ? audits['largest-contentful-paint'].numericValue / 1000 : 0,
+            displayValue: audits?.['largest-contentful-paint']?.displayValue || 'N/A'
+          },
+          inp: {
+            value: audits?.['interaction-to-next-paint']?.numericValue || 0,
+            displayValue: audits?.['interaction-to-next-paint']?.displayValue || 'N/A'
+          },
+          cls: {
+            value: audits?.['cumulative-layout-shift']?.numericValue || 0,
+            displayValue: audits?.['cumulative-layout-shift']?.displayValue || 'N/A'
+          },
+          ttfb: {
+            value: audits?.['server-response-time']?.numericValue || 0,
+            displayValue: audits?.['server-response-time']?.displayValue || 'N/A'
+          },
+          fcp: {
+            value: audits?.['first-contentful-paint']?.numericValue ? audits['first-contentful-paint'].numericValue / 1000 : 0,
+            displayValue: audits?.['first-contentful-paint']?.displayValue || 'N/A'
+          },
+          si: {
+            value: audits?.['speed-index']?.numericValue ? audits['speed-index'].numericValue / 1000 : 0,
+            displayValue: audits?.['speed-index']?.displayValue || 'N/A'
+          },
+          tbt: {
+            value: audits?.['total-blocking-time']?.numericValue || 0,
+            displayValue: audits?.['total-blocking-time']?.displayValue || 'N/A'
+          }
         },
-        cls: {
-          value: audits['cumulative-layout-shift']?.numericValue || 0,
-          displayValue: audits['cumulative-layout-shift']?.displayValue || 'N/A',
-          score: audits['cumulative-layout-shift']?.score || 0
+        diagnostics: {
+          pageSize: audits?.['total-byte-weight']?.numericValue || 0,
+          pageSizeFormatted: audits?.['total-byte-weight']?.displayValue || 'N/A',
+          requests: audits?.['network-requests']?.numericValue || 0,
+          renderBlockingResources: audits?.['render-blocking-resources']?.details?.items?.length || 0,
+          unusedCss: audits?.['unused-css-rules']?.details?.overallSavingsBytes || 0,
+          unusedJs: audits?.['unused-javascript']?.details?.overallSavingsBytes || 0,
+          imageOptimization: audits?.['uses-optimized-images']?.details?.overallSavingsBytes || 0,
+          modernImageFormats: audits?.['modern-image-formats']?.details?.overallSavingsBytes || 0,
+          serverResponseTime: audits?.['server-response-time']?.numericValue || 0
         },
-        ttfb: {
-          value: audits['server-response-time']?.numericValue || 0,
-          displayValue: audits['server-response-time']?.displayValue || 'N/A'
-        },
-        fcp: {
-          value: audits['first-contentful-paint']?.numericValue / 1000 || 0,
-          displayValue: audits['first-contentful-paint']?.displayValue || 'N/A'
-        },
-        si: {
-          value: audits['speed-index']?.numericValue / 1000 || 0,
-          displayValue: audits['speed-index']?.displayValue || 'N/A'
-        },
-        tbt: {
-          value: audits['total-blocking-time']?.numericValue || 0,
-          displayValue: audits['total-blocking-time']?.displayValue || 'N/A'
-        }
-      },
-      diagnostics: {
-        pageSize: audits['total-byte-weight']?.numericValue || 0,
-        pageSizeFormatted: audits['total-byte-weight']?.displayValue || 'N/A',
-        requests: audits['network-requests']?.numericValue || 0,
-        renderBlockingResources: audits['render-blocking-resources']?.details?.items?.length || 0,
-        unusedCss: audits['unused-css-rules']?.details?.overallSavingsBytes || 0,
-        unusedJs: audits['unused-javascript']?.details?.overallSavingsBytes || 0,
-        imageOptimization: audits['uses-optimized-images']?.details?.overallSavingsBytes || 0,
-        modernImageFormats: audits['modern-image-formats']?.details?.overallSavingsBytes || 0,
-        serverResponseTime: audits['server-response-time']?.numericValue || 0
-      },
-      opportunities: extractOpportunities(audits)
-    };
+        opportunities: extractOpportunities(audits)
+      };
+
+      console.log(`[PSI] ${strategy} audit completed. Score: ${results[strategy.toLowerCase()].score}`);
+
+    } catch (error) {
+      console.error(`[PSI] ${strategy} audit failed:`, error.message);
+      if (error.response) {
+        console.error(`[PSI] Status: ${error.response.status}`);
+        console.error(`[PSI] Data:`, JSON.stringify(error.response.data, null, 2));
+        console.error(`[PSI] Headers:`, error.response.headers);
+      }
+      throw error;
+    }
   }
 
   return results;
+}
+
+function extractOpportunities(audits) {
+  const opportunityAudits = [
+    'render-blocking-resources',
+    'unused-css-rules',
+    'unused-javascript',
+    'modern-image-formats',
+    'uses-optimized-images',
+    'uses-text-compression',
+    'uses-responsive-images',
+    'efficiently-encode-images',
+    'reduce-server-response-time',
+    'minify-css',
+    'minify-javascript',
+    'enable-text-compression',
+    'preload-lcp-image'
+  ];
+
+  const opportunities = [];
+  for (const auditKey of opportunityAudits) {
+    const audit = audits?.[auditKey];
+    if (audit && audit.score !== null && audit.score < 1) {
+      opportunities.push({
+        id: auditKey,
+        title: audit.title,
+        description: audit.description,
+        savings: audit.displayValue || 'N/A',
+        score: audit.score
+      });
+    }
+  }
+
+  return opportunities.sort((a, b) => (a.score || 0) - (b.score || 0));
 }
 
 function extractOpportunities(audits) {
@@ -437,13 +510,68 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// GET /api/audit - Test endpoint (no body needed, uses query params)
+app.get('/api/audit', async (req, res) => {
+  try {
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL query parameter required. Example: /api/audit?url=https://example.com' });
+    }
+
+    let targetUrl = url.trim();
+    if (!targetUrl.startsWith('http')) {
+      targetUrl = 'https://' + targetUrl;
+    }
+
+    console.log(`[AUDIT-GET] Testing PSI API with URL: ${targetUrl}`);
+
+    const API_KEY = process.env.PSI_API_KEY;
+    if (!API_KEY) {
+      return res.status(500).json({ error: 'PSI_API_KEY not configured' });
+    }
+
+    const psiUrl = new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
+    psiUrl.searchParams.set('url', targetUrl);
+    psiUrl.searchParams.set('key', API_KEY);
+    psiUrl.searchParams.set('category', 'PERFORMANCE');
+    psiUrl.searchParams.set('strategy', 'MOBILE');
+
+    console.log(`[AUDIT-GET] Calling PSI API...`);
+
+    const response = await axios.get(psiUrl.toString(), {
+      timeout: 30000,
+      validateStatus: (status) => true
+    });
+
+    res.json({
+      psiStatus: response.status,
+      psiStatusText: response.statusText,
+      hasLighthouseResult: !!response.data?.lighthouseResult,
+      score: response.data?.lighthouseResult?.categories?.performance?.score,
+      responsePreview: JSON.stringify(response.data).substring(0, 500)
+    });
+
+  } catch (error) {
+    console.error('[AUDIT-GET] Error:', error.message);
+    res.status(500).json({
+      error: error.message,
+      responseStatus: error.response?.status,
+      responseData: error.response?.data
+    });
+  }
+});
+
 // Main audit endpoint
 app.post('/api/audit', auditLimiter, async (req, res) => {
   try {
     const { url, traffic, conversionValue } = req.body;
 
+    console.log(`[AUDIT] Request received. URL: ${url}, Traffic: ${traffic}, Value: ${conversionValue}`);
+
     // Validate URL
     if (!url) {
+      console.log('[AUDIT] Rejected: URL missing');
       return res.status(400).json({ error: 'URL richiesto' });
     }
 
@@ -456,6 +584,7 @@ app.post('/api/audit', auditLimiter, async (req, res) => {
     try {
       new URL(targetUrl);
     } catch {
+      console.log('[AUDIT] Rejected: Invalid URL format');
       return res.status(400).json({ error: 'URL non valido' });
     }
 
@@ -471,14 +600,19 @@ app.post('/api/audit', auditLimiter, async (req, res) => {
     ];
 
     if (blockedPatterns.some(pattern => pattern.test(targetUrl))) {
+      console.log('[AUDIT] Rejected: Private IP/localhost');
       return res.status(403).json({ error: 'URL non accessibile' });
     }
 
     // Run WordPress detection
+    console.log('[AUDIT] Starting WordPress detection...');
     const wpInfo = await detectWordPress(targetUrl);
+    console.log(`[AUDIT] WordPress detected: ${wpInfo.isWordPress}, CMS: ${wpInfo.cms}`);
 
     // Run PageSpeed Insights
+    console.log('[AUDIT] Starting PageSpeed Insights...');
     const psiData = await runPageSpeedAudit(targetUrl);
+    console.log(`[AUDIT] PSI completed. Mobile score: ${psiData.mobile.score}`);
 
     // Calculate business impact
     const businessImpact = calculateBusinessImpact(
@@ -500,7 +634,10 @@ app.post('/api/audit', auditLimiter, async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Audit error:', error.message);
+    console.error('[AUDIT] Fatal error:', error.message);
+    if (error.stack) {
+      console.error('[AUDIT] Stack:', error.stack);
+    }
     res.status(500).json({
       error: 'Audit fallito',
       message: process.env.NODE_ENV === 'development' ? error.message : 'Errore interno del server'
