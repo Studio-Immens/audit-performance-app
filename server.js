@@ -50,8 +50,9 @@ app.use(cors({
     }
     return callback(null, true);
   },
-  methods: ['POST', 'GET'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['POST', 'GET', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Origin'],
+  credentials: false
 }));
 
 // ============================================
