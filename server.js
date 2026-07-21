@@ -225,23 +225,26 @@ async function runPageSpeedAudit(url) {
   }
 
   const strategies = ['MOBILE', 'DESKTOP'];
+  const categories = ['PERFORMANCE', 'ACCESSIBILITY', 'BEST_PRACTICES', 'SEO'];
   const results = {};
 
   for (const strategy of strategies) {
-    const psiUrl = new URL('https://www.googleapis.com/pagespeedonline/v5/runPagespeed');
-    psiUrl.searchParams.set('url', url);
-    psiUrl.searchParams.set('key', API_KEY);
-    psiUrl.searchParams.set('category', 'PERFORMANCE');
-    psiUrl.searchParams.set('category', 'ACCESSIBILITY');
-    psiUrl.searchParams.set('category', 'BEST_PRACTICES');
-    psiUrl.searchParams.set('category', 'SEO');
-    psiUrl.searchParams.set('strategy', strategy);
+    // Costruisci URL manualmente per supportare parametri multipli
+    const params = new URLSearchParams();
+    params.set('url', url);
+    params.set('key', API_KEY);
+    params.set('strategy', strategy);
+    
+    // Aggiungi TUTTE le categorie con append (non set!)
+    categories.forEach(cat => params.append('category', cat));
+
+    const psiUrl = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed?' + params.toString();
 
     console.log(`[PSI] Calling ${strategy} audit for: ${url}`);
-    console.log(`[PSI] URL (no key): ${psiUrl.toString().replace(API_KEY, '***')}`);
+    console.log(`[PSI] URL (no key): ${psiUrl.replace(API_KEY, '***')}`);
 
     try {
-      const response = await axios.get(psiUrl.toString(), {
+      const response = await axios.get(psiUrl, {
         timeout: 45000,
         headers: {
           'Accept': 'application/json',
@@ -263,7 +266,7 @@ async function runPageSpeedAudit(url) {
       }
 
       const lighthouse = data.lighthouseResult;
-      const audits = lighthouse.audits;
+      const audits = lighthouse.audits || {};
 
       results[strategy.toLowerCase()] = {
         score: Math.round((lighthouse.categories?.performance?.score || 0) * 100),
@@ -272,44 +275,44 @@ async function runPageSpeedAudit(url) {
         seo: Math.round((lighthouse.categories?.seo?.score || 0) * 100),
         metrics: {
           lcp: {
-            value: audits?.['largest-contentful-paint']?.numericValue ? audits['largest-contentful-paint'].numericValue / 1000 : 0,
-            displayValue: audits?.['largest-contentful-paint']?.displayValue || 'N/A'
+            value: audits['largest-contentful-paint']?.numericValue ? audits['largest-contentful-paint'].numericValue / 1000 : 0,
+            displayValue: audits['largest-contentful-paint']?.displayValue || 'N/A'
           },
           inp: {
-            value: audits?.['interaction-to-next-paint']?.numericValue || 0,
-            displayValue: audits?.['interaction-to-next-paint']?.displayValue || 'N/A'
+            value: audits['interaction-to-next-paint']?.numericValue || 0,
+            displayValue: audits['interaction-to-next-paint']?.displayValue || 'N/A'
           },
           cls: {
-            value: audits?.['cumulative-layout-shift']?.numericValue || 0,
-            displayValue: audits?.['cumulative-layout-shift']?.displayValue || 'N/A'
+            value: audits['cumulative-layout-shift']?.numericValue || 0,
+            displayValue: audits['cumulative-layout-shift']?.displayValue || 'N/A'
           },
           ttfb: {
-            value: audits?.['server-response-time']?.numericValue || 0,
-            displayValue: audits?.['server-response-time']?.displayValue || 'N/A'
+            value: audits['server-response-time']?.numericValue || 0,
+            displayValue: audits['server-response-time']?.displayValue || 'N/A'
           },
           fcp: {
-            value: audits?.['first-contentful-paint']?.numericValue ? audits['first-contentful-paint'].numericValue / 1000 : 0,
-            displayValue: audits?.['first-contentful-paint']?.displayValue || 'N/A'
+            value: audits['first-contentful-paint']?.numericValue ? audits['first-contentful-paint'].numericValue / 1000 : 0,
+            displayValue: audits['first-contentful-paint']?.displayValue || 'N/A'
           },
           si: {
-            value: audits?.['speed-index']?.numericValue ? audits['speed-index'].numericValue / 1000 : 0,
-            displayValue: audits?.['speed-index']?.displayValue || 'N/A'
+            value: audits['speed-index']?.numericValue ? audits['speed-index'].numericValue / 1000 : 0,
+            displayValue: audits['speed-index']?.displayValue || 'N/A'
           },
           tbt: {
-            value: audits?.['total-blocking-time']?.numericValue || 0,
-            displayValue: audits?.['total-blocking-time']?.displayValue || 'N/A'
+            value: audits['total-blocking-time']?.numericValue || 0,
+            displayValue: audits['total-blocking-time']?.displayValue || 'N/A'
           }
         },
         diagnostics: {
-          pageSize: audits?.['total-byte-weight']?.numericValue || 0,
-          pageSizeFormatted: audits?.['total-byte-weight']?.displayValue || 'N/A',
-          requests: audits?.['network-requests']?.numericValue || 0,
-          renderBlockingResources: audits?.['render-blocking-resources']?.details?.items?.length || 0,
-          unusedCss: audits?.['unused-css-rules']?.details?.overallSavingsBytes || 0,
-          unusedJs: audits?.['unused-javascript']?.details?.overallSavingsBytes || 0,
-          imageOptimization: audits?.['uses-optimized-images']?.details?.overallSavingsBytes || 0,
-          modernImageFormats: audits?.['modern-image-formats']?.details?.overallSavingsBytes || 0,
-          serverResponseTime: audits?.['server-response-time']?.numericValue || 0
+          pageSize: audits['total-byte-weight']?.numericValue || 0,
+          pageSizeFormatted: audits['total-byte-weight']?.displayValue || 'N/A',
+          requests: audits['network-requests']?.numericValue || 0,
+          renderBlockingResources: audits['render-blocking-resources']?.details?.items?.length || 0,
+          unusedCss: audits['unused-css-rules']?.details?.overallSavingsBytes || 0,
+          unusedJs: audits['unused-javascript']?.details?.overallSavingsBytes || 0,
+          imageOptimization: audits['uses-optimized-images']?.details?.overallSavingsBytes || 0,
+          modernImageFormats: audits['modern-image-formats']?.details?.overallSavingsBytes || 0,
+          serverResponseTime: audits['server-response-time']?.numericValue || 0
         },
         opportunities: extractOpportunities(audits)
       };
@@ -321,7 +324,6 @@ async function runPageSpeedAudit(url) {
       if (error.response) {
         console.error(`[PSI] Status: ${error.response.status}`);
         console.error(`[PSI] Data:`, JSON.stringify(error.response.data, null, 2));
-        console.error(`[PSI] Headers:`, error.response.headers);
       }
       throw error;
     }
