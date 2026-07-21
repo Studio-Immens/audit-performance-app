@@ -9,9 +9,11 @@ RUN npm install --omit=dev
 # Copy app source
 COPY . .
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs
-RUN adduser -S nodejs -u 1001
+# Create non-root user and writable reports directory
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001 && \
+    mkdir -p /app/reports && \
+    chown -R nodejs:nodejs /app/reports
 USER nodejs
 
 # Expose port
