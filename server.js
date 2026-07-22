@@ -143,7 +143,23 @@ async function detectWordPress(url) {
     hasUpdraftPlus: false,
     serverInfo: null,
     cms: 'Unknown',
-    detectionMethods: []
+    detectionMethods: [],
+    geo: {
+      schemaOrg: false,
+      openGraph: false,
+      twitterCards: false,
+      metaDescription: false,
+      canonicalUrl: false,
+      headingH1: false,
+      headingStructure: false,
+      contentLength: 0,
+      schemaType: null,
+      ogTitle: null,
+      ogDescription: null,
+      ogImage: null,
+      hasSitemap: false,
+      hasRobots: false
+    }
   };
 
   const detectedPlugins = new Set();
@@ -523,6 +539,74 @@ async function detectWordPress(url) {
       result.cms = 'WordPress';
     }
 
+    // --- GEO / AI Optimization Detection ---
+    // Schema.org detection
+    const schemaMatch = html.match(/<script\s+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i);
+    if (schemaMatch) {
+      result.geo.schemaOrg = true;
+      try {
+        const schemaData = JSON.parse(schemaMatch[1].trim());
+        result.geo.schemaType = schemaData['@type'] || null;
+      } catch(e) { result.geo.schemaType = 'present'; }
+    }
+    if (!result.geo.schemaOrg && /itemscope|itemtype|itemprop/i.test(html)) {
+      result.geo.schemaOrg = true;
+      result.geo.schemaType = 'microdata';
+    }
+
+    // Open Graph detection
+    result.geo.openGraph = /<meta[^>]+property=["']og:/i.test(html);
+    const ogTitle = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']*)["']/i);
+    if (ogTitle) result.geo.ogTitle = ogTitle[1];
+    const ogDesc = html.match(/<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']*)["']/i);
+    if (ogDesc) result.geo.ogDescription = ogDesc[1];
+
+    // Twitter Cards detection
+    result.geo.twitterCards = /<meta[^>]+name=["']twitter:/i.test(html);
+
+    // Meta description
+    result.geo.metaDescription = /<meta[^>]+name=["']description["'][^>]+content=["'][^"']+["']/i.test(html);
+
+    // Canonical URL
+    result.geo.canonicalUrl = /<link[^>]+rel=["']canonical["']/i.test(html);
+
+    // Heading structure
+    const h1Match = html.match(/<h1[^>]*>/i);
+    result.geo.headingH1 = !!h1Match;
+    const headings = (html.match(/<h[1-6][^>]*>/gi) || []).length;
+    result.geo.headingStructure = headings >= 3;
+
+    // Content length (approximate body text)
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+    if (bodyMatch) {
+      const textOnly = bodyMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+      result.geo.contentLength = textOnly.length;
+    }
+
+    // Sitemap & Robots (quick lightweight checks)
+    try {
+      const [sitemapResp, robotsResp] = await Promise.allSettled([
+        axios.head(url.replace(/\/$/, '') + '/sitemap.xml', {
+          timeout: 4000,
+          headers: { 'User-Agent': userAgent },
+          validateStatus: (status) => status < 500
+        }),
+        axios.get(url.replace(/\/$/, '') + '/robots.txt', {
+          timeout: 4000,
+          headers: { 'User-Agent': userAgent },
+          validateStatus: (status) => status < 500
+        }).catch(() => null)
+      ]);
+      if (sitemapResp.status === 'fulfilled' && sitemapResp.value && sitemapResp.value.status === 200) {
+        result.geo.hasSitemap = true;
+      }
+      if (robotsResp.status === 'fulfilled' && robotsResp.value) {
+        const robotsData = robotsResp.value.data || '';
+        result.geo.hasRobots = robotsData.length > 0;
+        if (/sitemap:/i.test(robotsData) && !result.geo.hasSitemap) result.geo.hasSitemap = true;
+      }
+    } catch(e) { /* sitemap/robots check non-critical */ }
+
     // --- Server info from headers ---
     if (headers['server']) result.serverInfo = headers['server'];
     if (headers['x-powered-by']) result.serverInfo = (result.serverInfo ? result.serverInfo + ' | ' : '') + headers['x-powered-by'];
@@ -729,7 +813,32 @@ function extractOpportunities(audits) {
 // CALCULATE BUSINESS IMPACT
 // ============================================
 
-function calculateBusinessImpact(psiData, traffic = 5000, conversionValue = 100) {
+function calculateGeoScore(geo) {
+  if (!geo) return { score: 0, maxScore: 100, checks: [] };
+  const checks = [
+    { name: 'Dati Strutturati (Schema.org)', passed: geo.schemaOrg, weight: 30, detail: geo.schemaOrg ? (geo.schemaType || 'Presente') : 'Non rilevato' },
+    { name: 'Open Graph Tags', passed: geo.openGraph, weight: 15, detail: geo.openGraph ? (geo.ogTitle ? `og:title, og:description` : 'Presenti') : 'Non rilevati' },
+    { name: 'Twitter Cards', passed: geo.twitterCards, weight: 10, detail: geo.twitterCards ? 'Presenti' : 'Non rilevati' },
+    { name: 'Meta Description', passed: geo.metaDescription, weight: 10, detail: geo.metaDescription ? 'Presente' : 'Non rilevata' },
+    { name: 'Canonical URL', passed: geo.canonicalUrl, weight: 5, detail: geo.canonicalUrl ? 'Impostato' : 'Non rilevato' },
+    { name: 'Sitemap XML', passed: geo.hasSitemap, weight: 10, detail: geo.hasSitemap ? 'Rilevata' : 'Non trovata' },
+    { name: 'Robots.txt', passed: geo.hasRobots, weight: 5, detail: geo.hasRobots ? 'Presente' : 'Non rilevato' },
+    { name: 'Heading H1', passed: geo.headingH1, weight: 5, detail: geo.headingH1 ? 'Presente' : 'Non rilevato' },
+    { name: 'Struttura Heading (H2-H6)', passed: geo.headingStructure, weight: 5, detail: geo.headingStructure ? 'Buona' : 'Migliorabile' },
+    { name: 'Contenuto testuale', passed: geo.contentLength > 300, weight: 5, detail: geo.contentLength > 0 ? `${geo.contentLength} caratteri` : 'Non rilevato' },
+  ];
+  let score = 0;
+  const maxScore = checks.reduce(function(sum, c) { return sum + c.weight; }, 0);
+  checks.forEach(function(c) { if (c.passed) score += c.weight; });
+  const pct = Math.round((score / maxScore) * 100);
+  let label = 'Critico';
+  if (pct >= 80) label = 'Ottimo';
+  else if (pct >= 60) label = 'Buono';
+  else if (pct >= 40) label = 'Sufficiente';
+  return { score: pct, maxScore, label, checks };
+}
+
+function calculateBusinessImpact(psiData, traffic = 5000, conversionValue = 100, geo) {
   const mobile = psiData.mobile;
   const loadTime = mobile.metrics.lcp.value;
   const pageSize = mobile.diagnostics.pageSize;
@@ -763,65 +872,70 @@ function calculateBusinessImpact(psiData, traffic = 5000, conversionValue = 100)
     estimatedHosting,
     pluginBloat,
     pageSizeMB: (pageSize / (1024 * 1024)).toFixed(2),
-    recommendations: generateRecommendations(mobile, loadTime, requests, pageSize)
+    geoScore: calculateGeoScore(geo),
+    recommendations: generateRecommendations(mobile, loadTime, requests, pageSize, geo, psiData.mobile.score)
   };
 }
 
-function generateRecommendations(mobile, loadTime, requests, pageSize) {
+function generateRecommendations(mobile, loadTime, requests, pageSize, geo, mobileScore) {
   const recs = [];
 
+  // --- Performance recommendations ---
   if (loadTime > 3) {
-    recs.push({
-      priority: 'critical',
-      title: 'Hosting lento o sovraccarico',
-      description: `LCP di ${loadTime.toFixed(1)}s indica un server che non regge il carico. Passa a VPS dedicato.`,
-      impact: 'Alto'
-    });
+    recs.push({ priority: 'critical', title: 'Hosting lento o sovraccarico', description: `LCP di ${loadTime.toFixed(1)}s indica un server che non regge il carico. Passa a VPS dedicato.`, impact: 'Alto' });
   }
 
   if (requests > 60) {
-    recs.push({
-      priority: 'high',
-      title: 'Troppe richieste HTTP',
-      description: `${requests} richieste rallentano il caricamento. Unisci CSS/JS e rimuovi script inutili.`,
-      impact: 'Medio-Alto'
-    });
+    recs.push({ priority: 'high', title: 'Troppe richieste HTTP', description: `${requests} richieste rallentano il caricamento. Unisci CSS/JS e rimuovi script inutili.`, impact: 'Medio-Alto' });
   }
 
   if (pageSize > 2 * 1024 * 1024) {
-    recs.push({
-      priority: 'high',
-      title: 'Pagina troppo pesante',
-      description: `${(pageSize/(1024*1024)).toFixed(1)}MB è eccessivo. Comprimi immagini e abilita lazy loading.`,
-      impact: 'Medio-Alto'
-    });
+    recs.push({ priority: 'high', title: 'Pagina troppo pesante', description: `${(pageSize/(1024*1024)).toFixed(1)}MB è eccessivo. Comprimi immagini e abilita lazy loading.`, impact: 'Medio-Alto' });
   }
 
   if (mobile.metrics.ttfb.value > 600) {
-    recs.push({
-      priority: 'critical',
-      title: 'TTFB troppo alto',
-      description: `Server impiega ${mobile.metrics.ttfb.value.toFixed(0)}ms a rispondere. Ottimizza server o cambia hosting.`,
-      impact: 'Alto'
-    });
+    recs.push({ priority: 'critical', title: 'TTFB troppo alto', description: `Server impiega ${mobile.metrics.ttfb.value.toFixed(0)}ms a rispondere. Ottimizza server o cambia hosting.`, impact: 'Alto' });
   }
 
   if (mobile.diagnostics.renderBlockingResources > 3) {
-    recs.push({
-      priority: 'medium',
-      title: 'Risorse render-blocking',
-      description: `${mobile.diagnostics.renderBlockingResources} file bloccano il rendering. Carica in modo differito.`,
-      impact: 'Medio'
-    });
+    recs.push({ priority: 'medium', title: 'Risorse render-blocking', description: `${mobile.diagnostics.renderBlockingResources} file bloccano il rendering. Carica in modo differito.`, impact: 'Medio' });
+  }
+
+  // --- SEO recommendations ---
+  if (mobileScore < 80) {
+    recs.push({ priority: 'high', title: 'Performance SEO penalizzante', description: `Punteggio ${mobileScore}/100 sotto soglia. Google penalizza i siti lenti nei risultati di ricerca.`, impact: 'Alto' });
+  }
+
+  // --- GEO / AI Optimization recommendations ---
+  if (geo) {
+    if (!geo.schemaOrg) {
+      recs.push({ priority: 'high', title: 'Dati Strutturati (Schema.org) mancanti', description: 'I motori AI (ChatGPT, Gemini, Google AI) non comprendono i tuoi contenuti. Aggiungi JSON-LD per essere indicizzato nei risultati AI.', impact: 'Alto' });
+    }
+    if (!geo.openGraph) {
+      recs.push({ priority: 'medium', title: 'Open Graph Tags mancanti', description: 'Condivisione social non ottimizzata. Aggiungi og:title, og:description, og:image per controllare l\'anteprima.', impact: 'Medio' });
+    }
+    if (!geo.twitterCards) {
+      recs.push({ priority: 'low', title: 'Twitter Cards non configurate', description: 'Le condivisioni su X/Twitter appaiono senza formato. Aggiungi twitter:card per preview ottimali.', impact: 'Basso' });
+    }
+    if (!geo.metaDescription) {
+      recs.push({ priority: 'medium', title: 'Meta Description mancante', description: 'I motori di ricerca mostrano snippet casuali. Aggiungi una meta description chiara per migliorare il CTR.', impact: 'Medio' });
+    }
+    if (!geo.canonicalUrl) {
+      recs.push({ priority: 'medium', title: 'Canonical URL non impostato', description: 'Rischio contenuti duplicati. Imposta il canonical per indicare la versione principale delle pagine.', impact: 'Medio' });
+    }
+    if (!geo.hasSitemap) {
+      recs.push({ priority: 'medium', title: 'Sitemap XML non trovata', description: 'Google e AI crawler faticano a indicizzare il sito. Genera una sitemap.xml completa.', impact: 'Medio' });
+    }
+    if (!geo.headingH1) {
+      recs.push({ priority: 'medium', title: 'Tag H1 mancante', description: 'La pagina non ha un heading principale. Ogni pagina deve avere un solo H1 chiaro.', impact: 'Basso' });
+    }
+    if (geo.contentLength < 300) {
+      recs.push({ priority: 'medium', title: 'Contenuto insufficiente', description: `Solo ${geo.contentLength} caratteri di testo. I motori AI premiano contenuti approfonditi e ben strutturati.`, impact: 'Medio' });
+    }
   }
 
   if (recs.length === 0) {
-    recs.push({
-      priority: 'low',
-      title: 'Monitoraggio continuo',
-      description: 'Performance buone. Imposta monitoraggio mensile per mantenere il vantaggio.',
-      impact: 'Basso'
-    });
+    recs.push({ priority: 'low', title: 'Monitoraggio continuo', description: 'Performance buone. Imposta monitoraggio mensile per mantenere il vantaggio.', impact: 'Basso' });
   }
 
   return recs;
@@ -944,7 +1058,8 @@ app.post('/api/audit', auditLimiter, async (req, res) => {
     const businessImpact = calculateBusinessImpact(
       psiData,
       parseInt(traffic) || 5000,
-      parseFloat(conversionValue) || 100
+      parseFloat(conversionValue) || 100,
+      wpInfo.geo
     );
 
     // Log audit (for analytics, not PII)
@@ -956,6 +1071,7 @@ app.post('/api/audit', auditLimiter, async (req, res) => {
       wordpress: wpInfo,
       performance: psiData,
       business: businessImpact,
+      geoScore: businessImpact.geoScore,
       auditedAt: new Date().toISOString()
     });
 
@@ -996,7 +1112,7 @@ app.post('/api/detect', auditLimiter, async (req, res) => {
 // POST /api/report — Generate PDF report from audit data
 app.post('/api/report', auditLimiter, async (req, res) => {
   try {
-    const { url, score, metrics, diagnostics, business, wordpress } = req.body;
+    const { url, score, seoScore, metrics, diagnostics, business, wordpress, geoScore } = req.body;
 
     if (!url && !score) {
       return res.status(400).json({ error: 'Dati audit richiesti' });
@@ -1007,10 +1123,12 @@ app.post('/api/report', auditLimiter, async (req, res) => {
     const result = await pdfReport.generateReport({
       url: url || 'N/A',
       score: score || 0,
+      seoScore: seoScore || 0,
       metrics: metrics || {},
       diagnostics: diagnostics || {},
       business: business || {},
-      wordpress: wordpress || {}
+      wordpress: wordpress || {},
+      geoScore: geoScore || { score: 0, maxScore: 100, label: 'N/D', checks: [] }
     });
 
     console.log(`[PDF] Report generated: ${result.filename} (${(result.size / 1024).toFixed(0)}KB)`);
